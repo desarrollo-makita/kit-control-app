@@ -239,12 +239,12 @@ fun parseCodigo(texto: String): CodigoData {
 
 @Composable
 fun MostrarDatosTabla(
-    itemPadre: MutableState<Boolean>,
+    itemPadre:Boolean,
     item: String,
     serieInicio: String,
     serieFinal: String,
     ean: String,
-    onItemPadreSelected: (Boolean) -> Unit // Función para manejar el cambio de selección
+    onItemPadreSelected: () -> Unit // Función para manejar el cambio de selección
 ) {
     // Contenedor para las filas de la tabla
     Row(
@@ -255,12 +255,9 @@ fun MostrarDatosTabla(
     ) {
         // Agregar el checkbox para "Item Padre", alineado junto a la fila
         Checkbox(
-            checked = itemPadre.value,
+            checked = itemPadre,
             onCheckedChange = { isChecked ->
-                onItemPadreSelected(isChecked) // Llamamos al callback para manejar el cambio de selección y pasar el item
-                if (isChecked) {
-                    Log.d("*MAKITA*", "Item seleccionado: $item") // Log del item cuando se selecciona
-                }
+                onItemPadreSelected()
             },
             modifier = Modifier
                 .width(130.dp)
@@ -306,6 +303,8 @@ fun MostrarDatosTabla(
 fun MostrarListaDeCodigos(listaCodigos: List<CodigoData>) {
     // Usamos un mapa para asociar el item con su estado de selección
 
+    val selectedItemIndex = remember { mutableStateOf<Int?>(null) }
+
    LazyRow(
         modifier = Modifier
             .fillMaxWidth()
@@ -319,15 +318,18 @@ fun MostrarListaDeCodigos(listaCodigos: List<CodigoData>) {
 
                 // Mostrar los datos de los códigos
                 listaCodigos.forEachIndexed { index, codigoData ->
-                    val selectedItem = remember { mutableStateOf(false) }
+                    val isSelected = selectedItemIndex.value == index
+
                     MostrarDatosTabla(
-                        itemPadre = selectedItem,
+                        itemPadre = isSelected,
                         item = codigoData.item.trim(),
                         serieInicio = codigoData.serieInicio,
                         serieFinal = codigoData.serieHasta,
                         ean = codigoData.ean,
-                        onItemPadreSelected = { isChecked ->
-                            selectedItem.value = isChecked  // Actualizamos el estado de selección
+                        onItemPadreSelected = {
+                            // Si seleccionamos un ítem, actualizamos el índice seleccionado
+                            selectedItemIndex.value = if (isSelected) null else index
+                            Log.d("*MAKITA*", "Item seleccionado: ${codigoData.item.trim()}")
                         }
                     )
                 }
