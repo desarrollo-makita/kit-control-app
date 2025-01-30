@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.text.TextStyle
 
 import androidx.compose.ui.text.font.FontFamily
@@ -235,14 +236,15 @@ fun parseCodigo(texto: String): CodigoData {
 
     return CodigoData(item, serieInicio, serieHasta, letraFabrica, ean)
 }
+
 @Composable
 fun MostrarDatosTabla(
-    itemPadre: Boolean,
+    itemPadre: MutableState<Boolean>,
     item: String,
     serieInicio: String,
     serieFinal: String,
     ean: String,
-    onItemPadreSelected: (Boolean, String) -> Unit // Función para manejar el cambio de selección
+    onItemPadreSelected: (Boolean) -> Unit // Función para manejar el cambio de selección
 ) {
     // Contenedor para las filas de la tabla
     Row(
@@ -253,9 +255,9 @@ fun MostrarDatosTabla(
     ) {
         // Agregar el checkbox para "Item Padre", alineado junto a la fila
         Checkbox(
-            checked = itemPadre,
+            checked = itemPadre.value,
             onCheckedChange = { isChecked ->
-                onItemPadreSelected(isChecked, item) // Llamamos al callback para manejar el cambio de selección y pasar el item
+                onItemPadreSelected(isChecked) // Llamamos al callback para manejar el cambio de selección y pasar el item
                 if (isChecked) {
                     Log.d("*MAKITA*", "Item seleccionado: $item") // Log del item cuando se selecciona
                 }
@@ -302,10 +304,9 @@ fun MostrarDatosTabla(
 
 @Composable
 fun MostrarListaDeCodigos(listaCodigos: List<CodigoData>) {
+    // Usamos un mapa para asociar el item con su estado de selección
 
-    val selectedItems = remember { mutableStateMapOf<String, Boolean>() } // Usamos un mapa para asociar el item con su estado de selección
-    // Contenedor para toda la tabla con desplazamiento horizontal
-    LazyRow(
+   LazyRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp)
@@ -318,20 +319,15 @@ fun MostrarListaDeCodigos(listaCodigos: List<CodigoData>) {
 
                 // Mostrar los datos de los códigos
                 listaCodigos.forEachIndexed { index, codigoData ->
-                    val isSelected = selectedItems[codigoData.item] ?: false // Verificamos si el item está seleccionado
+                    val selectedItem = remember { mutableStateOf(false) }
                     MostrarDatosTabla(
-                        itemPadre = isSelected,
+                        itemPadre = selectedItem,
                         item = codigoData.item.trim(),
                         serieInicio = codigoData.serieInicio,
                         serieFinal = codigoData.serieHasta,
                         ean = codigoData.ean,
-                        onItemPadreSelected = { isSelected , item ->
-                            // Actualizar el estado del checkbox en la lista de seleccionados
-                            if (isSelected) {
-                                selectedItems[item] = true // Marca como seleccionado
-                            } else {
-                                selectedItems[item] = false // Marca como no seleccionado
-                            }
+                        onItemPadreSelected = { isChecked ->
+                            selectedItem.value = isChecked  // Actualizamos el estado de selección
                         }
                     )
                 }
