@@ -1,25 +1,38 @@
 package com.makita.kitcontrolapp.ui.component
 
+import android.content.Context
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
+
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+
 
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 
+
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TextField
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+
+
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.text.TextStyle
 
@@ -32,8 +45,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.makita.kitcontrolapp.ui.theme.GreenMakita
+
 import com.makita.ubiapp.KitItem
 import com.makita.ubiapp.RetrofitClient
+import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
+
 
 data class CodigoData(
     val item: String,
@@ -60,43 +78,51 @@ fun KitControlScreen() {
     val listaCodigos = remember { mutableStateListOf<CodigoData>() }
     val listaKits = remember { mutableStateListOf<KitItem>() }
 
-    suspend fun obtenerKits(item: String) {
-        try {
-            // Llamar al endpoint para obtener los kits
-            val response = RetrofitClient.apiService.obtenerListaKit(item)
-            listaKits.clear() // Limpiar la lista antes de agregar nuevos resultados
-            listaKits.addAll(response) // Agregar los nuevos kits a la lista
-            Log.d("*MAKITA*", "Kits obtenidos: $listaKits")
-        } catch (e: Exception) {
-            Log.e("*MAKITA*", "Error al obtener los kits: ${e.message}")
-        }
+    var showCombo  by remember{ mutableStateOf(false) }
+    val context = LocalContext.current
+
+
+
+    var selectedKitData by remember { mutableStateOf<List<String>>(emptyList()) }
+    // Valor seleccionado en el ComboBox
+    var selectedItem by remember { mutableStateOf("") }
+
+    fun onKitSelected(response: List<KitItem>) {
+        // Mapeamos la lista para obtener solo el campo 'item'
+        val simplifiedResponse = response.map { it.item }
+
+        // Asignamos la lista de items
+        selectedKitData = simplifiedResponse
+        showCombo = true
+        // Imprimimos solo los valores 'item' en el log
+        Log.d("*MAKITA*", "Kit seleccionado --->cargo la lista: ${simplifiedResponse.joinToString(", ")}")
     }
 
     // Esto solo se ejecutará cuando el texto cambie realmente
     LaunchedEffect(textoEscaneado.text) {
         if (textoEscaneado.text.isNotEmpty()) {
-            if (textoEscaneado.text.isNotEmpty()) {
-                codigoInvalido = textoEscaneado.text.length != minCodigoLength
-                Log.d("*MAKITA*", "[KitControlScreen] Se ingresa texto: ${textoEscaneado.text}")
-                if (codigoInvalido) {
-                    textoEscaneado = TextFieldValue("")
-                }else{
-                    val dataItem = parseCodigo(textoEscaneado.text)
+            codigoInvalido = textoEscaneado.text.length != minCodigoLength
+            Log.d("*MAKITA*", "[KitControlScreen] Se ingresa texto: ${textoEscaneado.text}")
+            if (codigoInvalido) {
+                textoEscaneado = TextFieldValue("")
+            }else{
+                val dataItem = parseCodigo(textoEscaneado.text)
 
-                    item =  dataItem.item
-                    serieInicio =  dataItem.serieInicio
-                    serieHasta =  dataItem.serieHasta
-                    letraFabrica =  dataItem.letraFabrica
-                    ean =  dataItem.ean
+                item =  dataItem.item
+                serieInicio =  dataItem.serieInicio
+                serieHasta =  dataItem.serieHasta
+                letraFabrica =  dataItem.letraFabrica
+                ean =  dataItem.ean
 
-                    listaCodigos.add(dataItem)
-                    obtenerKits(dataItem.item)
+                Log.d("*MAKITA*", "[dataItem-selectedItem] $dataItem , $selectedItem")
+                listaCodigos.add(dataItem)
 
-                    showTable = true
-                    textoEscaneado = TextFieldValue("")
-                }
+                showTable = true
+                textoEscaneado = TextFieldValue("")
+
+                guardarCodigoEnArchivo(context, dataItem, selectedItem)
+
             }
-
         }
     }
 
@@ -173,11 +199,6 @@ fun KitControlScreen() {
                     )
                 }
             )
-            
-            if(showTable){
-                MostrarListaDeCodigos(listaCodigos )
-               // MostrarListaDeKits(listaKits)
-            }
 
             if (codigoInvalido) {
                 Text(
@@ -188,6 +209,26 @@ fun KitControlScreen() {
                 )
 
             }
+
+            if(showTable){
+                MostrarListaDeCodigos(listaCodigos,
+                    onKitSelected = { response ->
+                        onKitSelected(response) // Actualiza el estado en el padre
+                    })
+            }
+
+            if(showCombo){
+                ClassicComboBox(
+                    items = selectedKitData,  // La lista de elementos
+                    selectedItem = selectedItem,  // El ítem seleccionado
+                    onItemSelected = { item ->
+                        selectedItem = item
+                        Log.d("*MAKITA*" , "selectedItem  $selectedItem")// Actualiza el ítem seleccionado
+                    }
+                )
+            }
+
+
 
             if (clearRequested) {
                 textoEscaneado =  TextFieldValue("")
@@ -228,7 +269,7 @@ fun parseCodigo(texto: String): CodigoData {
         throw IllegalArgumentException("El código escaneado es demasiado corto: ${texto.length} caracteres")
     }
 
-    val item = texto.substring(0, 20)
+    val item = texto.substring(0, 20).trim()
     val serieInicio = texto.substring(20, 29)
     val serieHasta = texto.substring(29, 38)
     val letraFabrica = texto.substring(38, 39)
@@ -244,20 +285,31 @@ fun MostrarDatosTabla(
     serieInicio: String,
     serieFinal: String,
     ean: String,
-    onItemPadreSelected: () -> Unit // Función para manejar el cambio de selección
+    onItemPadreSelected: (List<KitItem>) -> Unit // Función para manejar el cambio de selección
 ) {
-    // Contenedor para las filas de la tabla
+
+    val coroutineScope = rememberCoroutineScope()
+    var apiResponse by remember { mutableStateOf<List<KitItem>>(emptyList()) } // Estado para almacenar la respuesta de la API
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 3.dp),
+            .padding(vertical =1.dp),
         horizontalArrangement = Arrangement.Start
     ) {
         // Agregar el checkbox para "Item Padre", alineado junto a la fila
         Checkbox(
             checked = itemPadre,
-            onCheckedChange = { isChecked ->
-                onItemPadreSelected()
+            onCheckedChange = {
+                coroutineScope.launch {
+                    try {
+
+                        val response = RetrofitClient.apiService.obtenerListaKit(item)
+                        onItemPadreSelected(response) // Pasar la respuesta al padre
+                    } catch (e: Exception) {
+                        Log.e("*ERROR API*", "Error al obtener datos: ${e.message}")
+                    }
+                }
             },
             modifier = Modifier
                 .width(130.dp)
@@ -300,11 +352,11 @@ fun MostrarDatosTabla(
 
 
 @Composable
-fun MostrarListaDeCodigos(listaCodigos: List<CodigoData>) {
+fun MostrarListaDeCodigos(listaCodigos: List<CodigoData> , onKitSelected: (List<KitItem>) -> Unit ) {
     // Usamos un mapa para asociar el item con su estado de selección
 
     val selectedItemIndex = remember { mutableStateOf<Int?>(null) }
-
+    var apiData by remember { mutableStateOf<List<KitItem>>(emptyList()) }
    LazyRow(
         modifier = Modifier
             .fillMaxWidth()
@@ -326,20 +378,22 @@ fun MostrarListaDeCodigos(listaCodigos: List<CodigoData>) {
                         serieInicio = codigoData.serieInicio,
                         serieFinal = codigoData.serieHasta,
                         ean = codigoData.ean,
-                        onItemPadreSelected = {
+                        onItemPadreSelected = { response ->
                             // Si seleccionamos un ítem, actualizamos el índice seleccionado
                             selectedItemIndex.value = if (isSelected) null else index
                             Log.d("*MAKITA*", "Item seleccionado: ${codigoData.item.trim()}")
+                            apiData = response
+                            Log.d("*MAKITA*", "apiDatao: $apiData")
+                            onKitSelected(apiData)
+
                         }
                     )
+
                 }
             }
         }
     }
 }
-
-
-
 @Composable
 fun MostrarCabeceras() {
     // Definir las cabeceras
@@ -347,9 +401,9 @@ fun MostrarCabeceras() {
 
     Row(
         modifier = Modifier
-        .fillMaxWidth()
-        .padding(vertical = 10.dp)
-        .background(Color(0xFFF5F5F5), shape = RoundedCornerShape(6.dp))
+            .fillMaxWidth()
+            .padding(vertical = 10.dp)
+            .background(Color(0xFFF5F5F5), shape = RoundedCornerShape(6.dp))
 
 
     ) {
@@ -371,29 +425,107 @@ fun MostrarCabeceras() {
 }
 
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MostrarListaDeKits(listaKits: List<KitItem>) {
-    // Similar a la función para mostrar la lista de códigos
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)
-    ) {
-        items(listaKits) { kitItem ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 3.dp),
-                horizontalArrangement = Arrangement.Start
+fun ClassicComboBox(
+    items: List<String>,
+    selectedItem: String,
+    onItemSelected: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = Modifier.fillMaxWidth()) { // Asegura que haya espacio suficiente
+
+        Column(
+            modifier = Modifier
+                .wrapContentHeight()
+                .padding(10.dp),
+            verticalArrangement = Arrangement.Top,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = !expanded },
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text(text = kitItem.tipoitem, modifier = Modifier.weight(1f))
-                Text(text = kitItem.item, modifier = Modifier.weight(1f))
-                Text(text = kitItem.Clasif7, modifier = Modifier.weight(1f))
-                Text(text = kitItem.Clasif9, modifier = Modifier.weight(1f))
+                TextField(
+                    value = selectedItem,
+                    onValueChange = {},
+                    label = {
+                        Text(
+                            "SELECCIONE EQUIVALENCIA",
+                            color = GreenMakita,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    readOnly = true,
+                    trailingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = null
+                        )
+                    },
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth()
+                        .background(Color.White, shape = RoundedCornerShape(12.dp)),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White,
+                        focusedIndicatorColor = Color(0xFFCCCCCC),
+                        unfocusedIndicatorColor = Color(0xFFDDDDDD),
+                        cursorColor = GreenMakita
+                    ),
+                    textStyle = TextStyle(
+                        fontSize = 18.sp,
+                        color = Color.Red,
+                        fontFamily = FontFamily.Serif,
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+
+                // Menú desplegable
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
+                    modifier = Modifier.fillMaxWidth() // Asegura que ocupe todo el ancho
+                ) {
+                    items.forEach { item ->
+                        DropdownMenuItem(
+                            text = { Text(item) },
+                            onClick = {
+                                onItemSelected(item)
+                                expanded = false
+                            },
+                            modifier = Modifier.fillMaxWidth() // Asegura que el item ocupe todo el ancho
+                        )
+                    }
+                }
             }
         }
+
+
     }
 }
+
+fun guardarCodigoEnArchivo(context: Context, dataItem: CodigoData , selectedItem : String) {
+    val linea = "${dataItem.item};${dataItem.serieInicio};${dataItem.serieHasta};${dataItem.letraFabrica};${dataItem.ean};$selectedItem\n"
+    val fileName = "codigos.txt"
+
+    try {
+        val file = File(context.filesDir, fileName)
+        val fos = FileOutputStream(file, true) // Modo 'true' para agregar contenido sin sobrescribir
+        fos.write(linea.toByteArray())
+        fos.close()
+        Log.d("*MAKITA*", "Código guardado en archivo: $linea")
+    } catch (e: Exception) {
+        Log.e("*MAKITA*", "Error al guardar código en archivo", e)
+    }
+}
+
+
+
 
 
 
