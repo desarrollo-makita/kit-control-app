@@ -56,11 +56,18 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("androidx.navigation:navigation-compose:2.5.3")
 
+
+
     implementation ("androidx.compose.material3:material3:1.0.0")// Para Material3
     implementation ("androidx.compose.material:material:1.0.0" )// Para Material (si usas la versión anterior)
 
     implementation("androidx.compose.material3:material3:1.2.0") // Asegura que Material 3 está presente
 
+    implementation ("androidx.compose.material:material-icons-extended:1.5.0")
+
+    implementation(files("libs/ZSDK_ANDROID_API.jar"))
+
+    implementation(libs.androidx.material3)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
