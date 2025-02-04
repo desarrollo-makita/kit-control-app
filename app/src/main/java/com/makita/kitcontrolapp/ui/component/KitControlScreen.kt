@@ -13,19 +13,24 @@ import android.content.BroadcastReceiver
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.widget.Toast
+import androidx.annotation.RequiresPermission
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 
 
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.Bluetooth
+import androidx.compose.material.icons.outlined.Print
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -40,13 +45,9 @@ import androidx.compose.material3.MaterialTheme
 
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.Key.Companion.Delete
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.text.TextStyle
 
 import androidx.compose.ui.text.font.FontFamily
@@ -60,12 +61,19 @@ import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.makita.kitcontrolapp.ui.theme.GreenMakita
+import com.makita.ubiapp.EnvioCabeceraKitRequest
+import com.makita.ubiapp.EnvioDatosRequest
 
 import com.makita.ubiapp.KitItem
 import com.makita.ubiapp.RetrofitClient
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
+import java.util.UUID
 
 
 data class CodigoData(
@@ -79,24 +87,27 @@ data class CodigoData(
 @Composable
 fun KitControlScreen() {
     var textoEscaneado by remember { mutableStateOf(TextFieldValue("")) }
-    var clearRequested by rememberSaveable { mutableStateOf(false) }
-    var codigoInvalido by remember { mutableStateOf(false) }
-    val minCodigoLength = 55
-    var showTable  by remember{ mutableStateOf(false) }
     var item by rememberSaveable { mutableStateOf("") }
     var serieInicio by rememberSaveable { mutableStateOf("") }
     var serieHasta by rememberSaveable { mutableStateOf("") }
     var letraFabrica by rememberSaveable {  mutableStateOf("") }
     var ean by rememberSaveable {  mutableStateOf("") }
+
+    var clearRequested by rememberSaveable { mutableStateOf(false) }
+    var codigoInvalido by remember { mutableStateOf(false) }
+    var showTable  by remember{ mutableStateOf(false) }
+    var showCombo  by remember{ mutableStateOf(false) }
+    var showButtonimprimir  by remember{ mutableStateOf(false) }
+
+    val minCodigoLength = 55
     val listaCodigos = remember { mutableStateListOf<CodigoData>() }
     val listaKits = remember { mutableStateListOf<KitItem>() }
-    var showCombo  by remember{ mutableStateOf(false) }
     val context = LocalContext.current
     var selectedKitData by remember { mutableStateOf<List<String>>(emptyList()) }
     var selectedItem by remember { mutableStateOf("") }
     var dataItem by remember {mutableStateOf<CodigoData?>(null)}
-
     var selectedDevice by remember { mutableStateOf<BluetoothDevice?>(null) }
+    val scrollState = rememberScrollState()
 
 
     fun clearAll() {
@@ -116,18 +127,27 @@ fun KitControlScreen() {
         selectedKitData = emptyList()
         selectedItem = ""
         dataItem = null
+        showButtonimprimir= false
 
     }
 
     fun onKitSelected(response: List<KitItem>) {
         // Mapeamos la lista para obtener solo el campo 'item'
         val simplifiedResponse = response.map { it.item }
+        Log.d("*MAKITA*", "simplifiedResponse: $simplifiedResponse")
+        // Verificar si la lista está vacía o no
+        if (simplifiedResponse.isNotEmpty()) {
+            // Asignamos la lista de items
+            selectedKitData = simplifiedResponse
+            Log.d("*MAKITA*", "selectedKitData: $selectedKitData")
+            showCombo = true  // Mostrar el Combo si hay elementos seleccionados
+        } else {
+            selectedKitData = emptyList()
+            showCombo = false  // Ocultar el Combo si la lista está vacía
+        }
 
-        // Asignamos la lista de items
-        selectedKitData = simplifiedResponse
-        showCombo = true
         // Imprimimos solo los valores 'item' en el log
-        Log.d("*MAKITA*", "Kit seleccionado --->cargo la lista: ${simplifiedResponse.joinToString(", ")}")
+        Log.d("*MAKITA*", "Kit seleccionado ---> cargo la lista: ${simplifiedResponse.joinToString(", ")}")
     }
 
     // Esto solo se ejecutará cuando el texto cambie realmente
@@ -151,7 +171,7 @@ fun KitControlScreen() {
                 showTable = true
                 textoEscaneado = TextFieldValue("")
 
-                guardarCodigoEnArchivo(context, dataItem!!)
+               // guardarCodigoEnArchivo(context, dataItem!!)
 
             }
         }
@@ -186,6 +206,16 @@ fun KitControlScreen() {
                     selectedDevice = device // Actualiza el estado en el padre
                 }
             )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(1.dp)
+                    .verticalScroll(scrollState)
+                    .background(Color.White, shape = RoundedCornerShape(30.dp)),
+                verticalArrangement = Arrangement.Top,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+
 
             OutlinedTextField(
                 value = textoEscaneado,
@@ -255,20 +285,37 @@ fun KitControlScreen() {
                     })
             }
 
-            if(showCombo){
-                ClassicComboBox(
-                    items = selectedKitData,  // La lista de elementos
-                    selectedItem = selectedItem,  // El ítem seleccionado
-                    onItemSelected = { item ->
-                        selectedItem = item
-                        Log.d("*MAKITA*" , "selectedItem  $selectedItem")// Actualiza el ítem seleccionado
-                    }
-                )
+
+                if(showCombo){
+                    ClassicComboBox(
+                        items = selectedKitData,  // La lista de elementos
+                        selectedItem = selectedItem,  // El ítem seleccionado
+                        onItemSelected = { item ->
+                            selectedItem = item
+                            Log.d("*MAKITA*" , "selectedItem  $selectedItem")// Actualiza el ítem seleccionado
+                            showButtonimprimir = true
+                        }
+
+
+                    )
+                }
+
+                if(showTable){
+                    BorrarButton(onClear = { clearAll() })
+                }
+
+                if(showButtonimprimir){
+                    ButtonImprimir(
+                        context,
+                        selectedDevice = selectedDevice,
+                        listaCodigos,
+                        selectedItem
+
+                    )
+                }
             }
 
-            if(showTable){
-                BorrarButton(onClear = { clearAll() })
-            }
+
             if (clearRequested) {
                 textoEscaneado =  TextFieldValue("")
                 clearRequested = false  // Evita que se repita el efecto
@@ -547,7 +594,7 @@ fun ClassicComboBox(
                 ExposedDropdownMenu(
                     expanded = expanded,
                     onDismissRequest = { expanded = false },
-                    modifier = Modifier.fillMaxWidth() // Asegura que ocupe todo el ancho
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     items.forEach { item ->
                         DropdownMenuItem(
@@ -556,7 +603,7 @@ fun ClassicComboBox(
                                 onItemSelected(item)
                                 expanded = false
                             },
-                            modifier = Modifier.fillMaxWidth() // Asegura que el item ocupe todo el ancho
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }
@@ -615,12 +662,6 @@ fun BorrarButton(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "Borrar",
-                color = Color.White, // Texto blanco
-                style = MaterialTheme.typography.bodyLarge
-            )
-            Spacer(modifier = Modifier.width(8.dp)) // Espacio entre el texto y el ícono
             Icon(
                 imageVector = Icons.Filled.Delete,
                 contentDescription = "Clear text",
@@ -631,6 +672,14 @@ fun BorrarButton(
                     },
                 tint = Color.White
             )
+            Spacer(modifier = Modifier.width(8.dp)) // Espacio entre el texto y el ícono
+            Text(
+                text = "Borrar",
+                color = Color.White, // Texto blanco
+                style = MaterialTheme.typography.bodyLarge
+            )
+
+
         }
     }
 }
@@ -852,8 +901,255 @@ private fun isZebraPrinter(deviceName: String): Boolean {
             deviceName.startsWith("ZQ", ignoreCase = true)
 }
 
+@Composable
+fun ButtonImprimir(
+    context: Context,
+    selectedDevice: BluetoothDevice?,
+    listaCodigos: List<CodigoData> ,
+    selectedItem : String
+
+) {
+
+    val datosKit = EnvioDatosRequest(
+        selectedItem,
+        listaCodigos
+    )
+
+    // Usamos LaunchedEffect para llamar a la API dentro de una corrutina
 
 
+    Log.d("*MAKITA001*" ,"selectedDevice* $selectedDevice")
+    Log.d("*MAKITA001*" ,"listaCodigos** $listaCodigos")
+    Log.d("*MAKITA001*" ,"selectedItem*** $selectedItem")
+
+    val dataPdf417 = prepararDatosImpresion(listaCodigos, selectedItem)
+
+    // Verifica el permiso BLUETOOTH_CONNECT antes de permitir la impresión
+    val hasBluetoothConnectPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.BLUETOOTH_CONNECT
+        ) == PackageManager.PERMISSION_GRANTED
+    } else {
+        true // No es necesario solicitar permiso en versiones anteriores
+    }
+
+    // Mostrar un mensaje de error si no se tiene el permiso
+    if (!hasBluetoothConnectPermission) {
+        Log.d("ButtonImprimir", "Permiso Bluetooth no otorgado.")
+        Text("Permiso Bluetooth no otorgado. No se puede imprimir.")
+    }
+
+    ExtendedFloatingActionButton(
+        onClick = {
+            Log.d("ButtonImprimir", "Botón Imprimir presionado.")
+
+            CoroutineScope(Dispatchers.IO).launch {
+                insertarDatosKit(datosKit) // Llamada a la función suspendida
+            }
+
+
+            if (hasBluetoothConnectPermission) {
+                Log.d("ButtonImprimir", "Permiso Bluetooth otorgado.")
+
+                selectedDevice?.let { device ->
+                    val printerLanguage = "ZPL" // Cambiar según el lenguaje soportado por la impresora
+                    Log.d("ButtonImprimir", "Dispositivo seleccionado: ${device.name}, Dirección: ${device.address}")
+
+                  printDataToBluetoothDevice(
+                            device,
+                            dataPdf417,
+                            context,
+                            printerLanguage,
+
+                        )
+                }
+            } else {
+                Log.d("ButtonImprimir", "Permiso Bluetooth no otorgado al presionar el botón.")
+                Toast.makeText(context, "Permiso Bluetooth no otorgado. No se puede imprimir.", Toast.LENGTH_SHORT).show()
+            }
+        },
+        containerColor = Color(0xFF00909E),
+        contentColor = Color.White,
+        icon = {
+            Icon(
+                Icons.Outlined.Print,
+                contentDescription = "Imprimir",
+                modifier = Modifier.size(28.dp)
+            )
+        },
+        text = {
+            Text(
+                text = "Imprimir",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        modifier = Modifier
+            .height(50.dp)
+            .width(200.dp)
+    )
+
+    Spacer(modifier = Modifier.width(8.dp))
+}
+
+
+@RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
+fun printDataToBluetoothDevice(
+    device: BluetoothDevice,
+    data: String,
+    context: Context,
+    printerLanguage: String,
+    ) {
+    val MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
+
+
+    Log.d("MAKITA001" ,"device $device")
+    Log.d("MAKITA001" ,"data $data")
+    Log.d("MAKITA001" ,"context $context")
+    Log.d("MAKITA001" ,"printerLanguage $printerLanguage")
+
+    val data2 = "GA4530-3"
+    val CodigoConcatenado2 = data
+    val CodigocomercialNN2 = "GA4530-3"
+
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            // Conectar al dispositivo Bluetooth
+            Log.d("Bluetooth", "Intentando conectar al dispositivo ${device.name}, dirección ${device.address}")
+
+
+            val bluetoothSocket = device.createRfcommSocketToServiceRecord(MY_UUID)
+            bluetoothSocket.connect()
+
+            if (bluetoothSocket.isConnected) {
+                Log.d("Bluetooth", "Conexión exitosa.")
+
+                val outputStream = bluetoothSocket.outputStream
+
+                // Enviar los datos de impresión
+                Log.d("", "Enviando datos de impresión: $CodigoConcatenado2")
+
+                if (printerLanguage == "ZPL") {
+                    val linea2 = "^XA\n " +
+                            "^PW354 \n" +   // Ancho de la etiqueta (3 cm = 354 dots)
+                            "^LL354 \n" +
+                            "^FO50,25\n " +
+                            "^ADN,15,13\n " +
+                            "^FD$data2^FS\n " +
+                            "^FO50,70\n " +
+                            "^ADN,15,12\n " +
+                            //"^B7N,5,10,2,5,N\n " +
+                            //"^B7N,1,30,2,30,N\n  " +
+                            //"^B7N,2,10,2,30,NY\n  " +
+                            //"^FD$comercial^FS\n " +
+                            "^B7N,5,10,2,20,N" +
+                            "^FD$CodigoConcatenado2^FS " +
+                            "^FO50,190\n " +
+                            "^ADN,15,13\n " +
+                            "^FD$CodigocomercialNN2^FS\n " +
+                            "^XZ\n"
+
+                    outputStream.write(linea2.toByteArray(Charsets.US_ASCII))
+                    outputStream.flush()
+                    Log.d("Bluetooth", "Datos enviados correctamente.")
+                    // Preparar los datos para enviar al endpoint
+                 /*   val bitacora = RegistraBitacoraEquisZ(
+                        itemAnterior = itemAnterior,
+                        serieDesde = serieDesde, // Ejemplo, ajustar según tus datos
+                        serieHasta = serieHasta, // Ejemplo, ajustar según tus datos
+                        letraFabrica =letraFabrica,   // Ejemplo, ajustar según tus datos
+                        ean = ean,
+                        itemNuevo = selectedItem,
+                        cargador = cargador,
+                        bateria = bateria // Ejemplo, ajustar según tus datos
+                    )*/
+
+                    // Llamar al endpoint
+
+                    try {
+                        //val response = apiService.insertaDataEquisZ(bitacora)
+
+                    } catch (e: Exception) {
+                        Log.e("API", "Error al llamar al endpoint: ${e.message}")
+                    }
+                    //onPrintSuccess()
+
+                }
+
+                // Mensaje de éxito
+                withContext(Dispatchers.Main) {
+                    Log.d("ETIQUETADO-Z", "Impresión realizada con éxito.")
+
+                    Toast.makeText(context, "Impresión Correcta", Toast.LENGTH_SHORT).show()
+                }
+
+            } else {
+                // Si no se pudo conectar
+                withContext(Dispatchers.Main) {
+                    Log.d("Bluetooth", "No se pudo conectar al dispositivo.")
+
+                    Toast.makeText(context, "No se pudo conectar al dispositivo Bluetooth", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("Bluetooth", "Error al enviar datos: ${e.message}")
+
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "Error al enviar datos: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        } finally {
+            try {
+                // bluetoothSocket.close()
+                Log.d("Bluetooth", "Socket cerrado.")
+
+            } catch (e: IOException) {
+                Log.e("Bluetooth", "Error al cerrar el socket: ${e.message}")
+
+            }
+        }
+    }
+}
+
+
+fun prepararDatosImpresion(
+    listaCodigos: List<CodigoData>,
+    selectedItem: String): String{
+
+    val itemNuevo = selectedItem.padEnd(20, '0')
+    val dataPdf417 = "$itemNuevo+000000001+000000001+Y+0088381096959"
+    // Creamos una variable StringBuilder para armar el texto final
+    val textoFinal = StringBuilder()
+
+
+    Log.d("ETIQUETADO-Z", "dataPdf417 remacterizado: $dataPdf417")
+
+    // Agregamos las variables separadas por comas (formato CSV)
+    //textoFinal.append("$textoAnterior,$serieDesde,$serieHasta,$letraFabrica,$ean,$itemEquivalente,$cargador,$bateria")
+   // Log.d("ETIQUETADO-Z", "textoFinal : $textoFinal")
+
+
+    // Retornamos el texto final como un String
+    return (dataPdf417)
+}
+
+
+suspend fun insertarDatosKit(datosKit: EnvioDatosRequest) {
+    try {
+        val response = RetrofitClient.apiService.insertaDataDetalle(datosKit)
+        Log.d("*MAKITA001*", "Datos insertados con éxito: $response")
+
+        val datosKitCabecera = EnvioCabeceraKitRequest(
+            ItemKitID =datosKit.selectedItem ,
+            ean = response.itemEncontrado.ean
+        )
+        // Ahora llamamos a otro endpoint (segundo)
+        val secondResponse = RetrofitClient.apiService.insertaDataCabecera(datosKitCabecera)
+        Log.d("*MAKITA001*", "Respuesta del segundo endpoint: $secondResponse")
+    } catch (e: Exception) {
+        Log.e("*MAKITA001*", "Error al insertar datos: ${e.message}")
+    }
+}
 
 
 
