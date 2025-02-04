@@ -68,6 +68,7 @@ import com.makita.ubiapp.KitItem
 import com.makita.ubiapp.RetrofitClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -108,6 +109,7 @@ fun KitControlScreen() {
     var dataItem by remember {mutableStateOf<CodigoData?>(null)}
     var selectedDevice by remember { mutableStateOf<BluetoothDevice?>(null) }
     val scrollState = rememberScrollState()
+    var isLoading by remember { mutableStateOf(false) } // Estado para el loading
 
 
     fun clearAll() {
@@ -285,7 +287,9 @@ fun KitControlScreen() {
                     })
             }
 
-
+                if (isLoading) {
+                    LoadingIndicator()
+                }
                 if(showCombo){
                     ClassicComboBox(
                         items = selectedKitData,  // La lista de elementos
@@ -310,11 +314,15 @@ fun KitControlScreen() {
                         selectedDevice = selectedDevice,
                         listaCodigos,
                         selectedItem,
-                        onClear = { clearAll() }
+                        onClear = { clearAll() },
+                        isLoading = isLoading,
+                        setLoading = { isLoading = it } // Pasamos la función para cambiar el estado
 
                     )
                 }
             }
+
+
 
 
             if (clearRequested) {
@@ -908,7 +916,9 @@ fun ButtonImprimir(
     selectedDevice: BluetoothDevice?,
     listaCodigos: List<CodigoData> ,
     selectedItem : String,
-    onClear: () -> Unit
+    onClear: () -> Unit,
+    isLoading: Boolean,
+    setLoading: (Boolean) -> Unit
 
 ) {
 
@@ -916,13 +926,6 @@ fun ButtonImprimir(
         selectedItem,
         listaCodigos
     )
-
-    // Usamos LaunchedEffect para llamar a la API dentro de una corrutina
-
-
-    Log.d("*MAKITA001*" ,"selectedDevice* $selectedDevice")
-    Log.d("*MAKITA001*" ,"listaCodigos** $listaCodigos")
-    Log.d("*MAKITA001*" ,"selectedItem*** $selectedItem")
 
     val dataPdf417 = prepararDatosImpresion(listaCodigos, selectedItem)
 
@@ -945,7 +948,7 @@ fun ButtonImprimir(
     ExtendedFloatingActionButton(
         onClick = {
             Log.d("ButtonImprimir", "Botón Imprimir presionado.")
-
+            setLoading(true)
             CoroutineScope(Dispatchers.IO).launch {
                 insertarDatosKit(datosKit) // Llamada a la función suspendida
             }
@@ -959,13 +962,14 @@ fun ButtonImprimir(
                     Log.d("ButtonImprimir", "Dispositivo seleccionado: ${device.name}, Dirección: ${device.address}")
 
                   printDataToBluetoothDevice(
-                            device,
-                            dataPdf417,
-                            context,
-                            printerLanguage,
-                            onClear
+                        device,
+                        dataPdf417,
+                        context,
+                        printerLanguage,
+                        onClear,
+                        setLoading
 
-                        )
+                  )
                 }
             } else {
                 Log.d("ButtonImprimir", "Permiso Bluetooth no otorgado al presionar el botón.")
@@ -1003,7 +1007,8 @@ fun printDataToBluetoothDevice(
     data: String,
     context: Context,
     printerLanguage: String,
-    onClear: () -> Unit
+    onClear: () -> Unit,
+    setLoading: (Boolean) -> Unit
     ) {
     val MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
 
@@ -1018,15 +1023,13 @@ fun printDataToBluetoothDevice(
     val CodigocomercialNN2 = "GA4530-3"
 
     CoroutineScope(Dispatchers.IO).launch {
+
+        val bluetoothSocket = device.createRfcommSocketToServiceRecord(MY_UUID)
+        bluetoothSocket.connect()
+
         try {
             // Conectar al dispositivo Bluetooth
-            Log.d("Bluetooth", "Intentando conectar al dispositivo ${device.name}, dirección ${device.address}")
-
-
-            val bluetoothSocket = device.createRfcommSocketToServiceRecord(MY_UUID)
-            bluetoothSocket.connect()
-
-            if (bluetoothSocket.isConnected) {
+           if (bluetoothSocket.isConnected) {
                 Log.d("Bluetooth", "Conexión exitosa.")
 
                 val outputStream = bluetoothSocket.outputStream
@@ -1057,27 +1060,7 @@ fun printDataToBluetoothDevice(
                     outputStream.write(linea2.toByteArray(Charsets.US_ASCII))
                     outputStream.flush()
                     Log.d("Bluetooth", "Datos enviados correctamente.")
-                    // Preparar los datos para enviar al endpoint
-                 /*   val bitacora = RegistraBitacoraEquisZ(
-                        itemAnterior = itemAnterior,
-                        serieDesde = serieDesde, // Ejemplo, ajustar según tus datos
-                        serieHasta = serieHasta, // Ejemplo, ajustar según tus datos
-                        letraFabrica =letraFabrica,   // Ejemplo, ajustar según tus datos
-                        ean = ean,
-                        itemNuevo = selectedItem,
-                        cargador = cargador,
-                        bateria = bateria // Ejemplo, ajustar según tus datos
-                    )*/
 
-                    // Llamar al endpoint
-
-                    try {
-                        //val response = apiService.insertaDataEquisZ(bitacora)
-
-                    } catch (e: Exception) {
-                        Log.e("API", "Error al llamar al endpoint: ${e.message}")
-                    }
-                    //onPrintSuccess()
 
                 }
 
@@ -1087,6 +1070,7 @@ fun printDataToBluetoothDevice(
 
                     Toast.makeText(context, "Impresión Correcta", Toast.LENGTH_SHORT).show()
                     onClear()
+                    setLoading(false)
 
                 }
 
@@ -1103,10 +1087,13 @@ fun printDataToBluetoothDevice(
 
             withContext(Dispatchers.Main) {
                 Toast.makeText(context, "Error al enviar datos: ${e.message}", Toast.LENGTH_SHORT).show()
+                onClear()
+                setLoading(false)
             }
         } finally {
             try {
-                // bluetoothSocket.close()
+                delay(500) // Espera antes de cerrar el socket
+                bluetoothSocket?.close()
                 Log.d("Bluetooth", "Socket cerrado.")
 
             } catch (e: IOException) {
@@ -1154,6 +1141,34 @@ suspend fun insertarDatosKit(datosKit: EnvioDatosRequest) {
         Log.d("*MAKITA001*", "Respuesta del segundo endpoint: $secondResponse")
     } catch (e: Exception) {
         Log.e("*MAKITA001*", "Error al insertar datos: ${e.message}")
+    }
+}
+
+
+@Composable
+fun LoadingIndicator() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+
+            .wrapContentSize(Alignment.Center)
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(60.dp), // Tamaño del indicador
+                color = Color(0xFF00909E), // Color personalizado
+                strokeWidth = 6.dp // Grosor del círculo
+            )
+            Spacer(modifier = Modifier.height(16.dp)) // Espaciado
+            Text(
+                text = "Cargando...",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        }
     }
 }
 
