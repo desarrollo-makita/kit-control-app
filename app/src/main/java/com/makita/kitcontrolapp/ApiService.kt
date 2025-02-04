@@ -2,6 +2,7 @@ package com.makita.ubiapp
 
 import com.makita.kitcontrolapp.ui.component.CodigoData
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
@@ -27,7 +28,9 @@ data class ResponseCabeceraKit(
     val status: String,
     val message: String,
     val serieDesde: String,
-    val serieHasta: String
+    val serieHasta: String,
+    val ean : String,
+    val ItemKitID: String
 )
 
 data class ResponseApi(
@@ -52,4 +55,10 @@ interface ApiService {
 
     @POST("api/inserta-data-cabecera-kit")  // Endpoint de la API
     suspend fun insertaDataCabecera(@Body data: EnvioCabeceraKitRequest): ResponseCabeceraKit
+
+    @DELETE("api/elimina-data-kit-detalle")  // Nuevo endpoint para eliminar detalles del kit
+    suspend fun eliminarDataDetalle(@Body data: EnvioDatosRequest): ResponseApi
+
+    @DELETE("api/elimina-data-cabecera-kit")  // Nuevo endpoint para eliminar cabecera del kit
+    suspend fun eliminarDataCabecera(@Body data: EnvioCabeceraKitRequest): ResponseCabeceraKit
 }

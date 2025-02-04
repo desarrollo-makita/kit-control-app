@@ -309,7 +309,8 @@ fun KitControlScreen() {
                         context,
                         selectedDevice = selectedDevice,
                         listaCodigos,
-                        selectedItem
+                        selectedItem,
+                        onClear = { clearAll() }
 
                     )
                 }
@@ -906,7 +907,8 @@ fun ButtonImprimir(
     context: Context,
     selectedDevice: BluetoothDevice?,
     listaCodigos: List<CodigoData> ,
-    selectedItem : String
+    selectedItem : String,
+    onClear: () -> Unit
 
 ) {
 
@@ -961,6 +963,7 @@ fun ButtonImprimir(
                             dataPdf417,
                             context,
                             printerLanguage,
+                            onClear
 
                         )
                 }
@@ -1000,6 +1003,7 @@ fun printDataToBluetoothDevice(
     data: String,
     context: Context,
     printerLanguage: String,
+    onClear: () -> Unit
     ) {
     val MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
 
@@ -1082,6 +1086,8 @@ fun printDataToBluetoothDevice(
                     Log.d("ETIQUETADO-Z", "Impresión realizada con éxito.")
 
                     Toast.makeText(context, "Impresión Correcta", Toast.LENGTH_SHORT).show()
+                    onClear()
+
                 }
 
             } else {
