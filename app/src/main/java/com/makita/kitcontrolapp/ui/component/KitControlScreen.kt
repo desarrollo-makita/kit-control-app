@@ -65,6 +65,7 @@ import com.makita.ubiapp.EnvioCabeceraKitRequest
 import com.makita.ubiapp.EnvioDatosRequest
 
 import com.makita.ubiapp.KitItem
+import com.makita.ubiapp.ResponseCabeceraKit
 import com.makita.ubiapp.RetrofitClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -927,8 +928,6 @@ fun ButtonImprimir(
         listaCodigos
     )
 
-    val dataPdf417 = prepararDatosImpresion(listaCodigos, selectedItem)
-
     // Verifica el permiso BLUETOOTH_CONNECT antes de permitir la impresión
     val hasBluetoothConnectPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         ContextCompat.checkSelfPermission(
@@ -950,31 +949,48 @@ fun ButtonImprimir(
             Log.d("ButtonImprimir", "Botón Imprimir presionado.")
             setLoading(true)
             CoroutineScope(Dispatchers.IO).launch {
-                insertarDatosKit(datosKit) // Llamada a la función suspendida
-            }
+               val itemKitPdf  = insertarDatosKit(datosKit) // Llamada a la función suspendida
 
+                if (itemKitPdf != null) {
+                    if (itemKitPdf.status == "success") {
+                        Log.d("*MAKITA001*", "Registro insertado correctamente: $itemKitPdf")
+                        val armadoCodigoKitPdf417 = "${itemKitPdf.ItemKitID.padEnd(20)}${itemKitPdf.serieDesde}${itemKitPdf.serieHasta}${itemKitPdf.ean}"
+                        val itemKit = itemKitPdf.ItemKitID
+                        if (hasBluetoothConnectPermission) {
+                            Log.d("ButtonImprimir", "Permiso Bluetooth otorgado.")
 
-            if (hasBluetoothConnectPermission) {
-                Log.d("ButtonImprimir", "Permiso Bluetooth otorgado.")
+                            selectedDevice?.let { device ->
+                                val printerLanguage = "ZPL" // Cambiar según el lenguaje soportado por la impresora
+                                Log.d("ButtonImprimir", "Dispositivo seleccionado: ${device.name}, Dirección: ${device.address}")
+                                val serieInicial =  itemKitPdf.serieDesde
+                                printDataToBluetoothDevice(
+                                    device,
+                                    armadoCodigoKitPdf417,
+                                    context,
+                                    printerLanguage,
+                                    onClear,
+                                    setLoading,
+                                    itemKit,
+                                    serieInicial
 
-                selectedDevice?.let { device ->
-                    val printerLanguage = "ZPL" // Cambiar según el lenguaje soportado por la impresora
-                    Log.d("ButtonImprimir", "Dispositivo seleccionado: ${device.name}, Dirección: ${device.address}")
-
-                  printDataToBluetoothDevice(
-                        device,
-                        dataPdf417,
-                        context,
-                        printerLanguage,
-                        onClear,
-                        setLoading
-
-                  )
+                                )
+                            }
+                        } else {
+                            Log.d("ButtonImprimir", "Permiso Bluetooth no otorgado al presionar el botón.")
+                            Toast.makeText(context, "Permiso Bluetooth no otorgado. No se puede imprimir.", Toast.LENGTH_LONG).show()
+                        }
+                    } else {
+                        Log.d("*MAKITA001*", "Error al insertar registro: ${itemKitPdf.message}")
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(context, "KIT ya fue ingresado ", Toast.LENGTH_LONG).show()
+                            setLoading(false)
+                        }
+                        onClear()
+                    }
                 }
-            } else {
-                Log.d("ButtonImprimir", "Permiso Bluetooth no otorgado al presionar el botón.")
-                Toast.makeText(context, "Permiso Bluetooth no otorgado. No se puede imprimir.", Toast.LENGTH_SHORT).show()
             }
+
+
         },
         containerColor = Color(0xFF00909E),
         contentColor = Color.White,
@@ -1008,19 +1024,15 @@ fun printDataToBluetoothDevice(
     context: Context,
     printerLanguage: String,
     onClear: () -> Unit,
-    setLoading: (Boolean) -> Unit
+    setLoading: (Boolean) -> Unit,
+    itemKit: String,
+    serieInicial: String
     ) {
     val MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
 
-
-    Log.d("MAKITA001" ,"device $device")
-    Log.d("MAKITA001" ,"data $data")
-    Log.d("MAKITA001" ,"context $context")
-    Log.d("MAKITA001" ,"printerLanguage $printerLanguage")
-
-    val data2 = "GA4530-3"
+    val data2 = itemKit
     val CodigoConcatenado2 = data
-    val CodigocomercialNN2 = "GA4530-3"
+    val CodigocomercialNN2 = serieInicial
 
     CoroutineScope(Dispatchers.IO).launch {
 
@@ -1127,7 +1139,7 @@ fun prepararDatosImpresion(
 }
 
 
-suspend fun insertarDatosKit(datosKit: EnvioDatosRequest) {
+suspend fun insertarDatosKit(datosKit: EnvioDatosRequest): ResponseCabeceraKit? {
     try {
         val response = RetrofitClient.apiService.insertaDataDetalle(datosKit)
         Log.d("*MAKITA001*", "Datos insertados con éxito: $response")
@@ -1139,8 +1151,11 @@ suspend fun insertarDatosKit(datosKit: EnvioDatosRequest) {
         // Ahora llamamos a otro endpoint (segundo)
         val secondResponse = RetrofitClient.apiService.insertaDataCabecera(datosKitCabecera)
         Log.d("*MAKITA001*", "Respuesta del segundo endpoint: $secondResponse")
+
+        return secondResponse
     } catch (e: Exception) {
         Log.e("*MAKITA001*", "Error al insertar datos: ${e.message}")
+        return null
     }
 }
 
