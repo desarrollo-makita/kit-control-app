@@ -1,6 +1,7 @@
 package com.makita.ubiapp
 
 import com.makita.kitcontrolapp.ui.component.CodigoData
+import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
@@ -22,6 +23,8 @@ data class EnvioDatosRequest(
 data class EnvioCabeceraKitRequest(
     val ItemKitID : String,
     val ean : String,
+    val series: List<String>
+
 )
 
 data class ResponseCabeceraKit(
@@ -34,7 +37,9 @@ data class ResponseCabeceraKit(
 )
 
 data class ResponseApi(
-    val itemEncontrado: ResponseDetalleKit
+    val ean: String, // ean fuera de la lista
+    val serieInicio: String, // serieInicio fuera de la lista
+    val itemEncontrado: List<ResponseDetalleKit>? // La lista con los objetos de detalle
 )
 data class ResponseDetalleKit(
     val item: String,
@@ -50,7 +55,7 @@ interface ApiService {
     suspend fun obtenerListaKit(@Path("item") item: String): List<KitItem>
 
 
-    @POST("api/inserta-data-kit-detalle")  // Endpoint de la API
+    @POST("api/inserta-data-kit-detalle")
     suspend fun insertaDataDetalle(@Body data: EnvioDatosRequest): ResponseApi
 
     @POST("api/inserta-data-cabecera-kit")  // Endpoint de la API

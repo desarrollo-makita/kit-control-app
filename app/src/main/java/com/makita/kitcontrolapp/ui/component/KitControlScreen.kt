@@ -1071,6 +1071,9 @@ fun printDataToBluetoothDevice(
 
                     outputStream.write(linea2.toByteArray(Charsets.US_ASCII))
                     outputStream.flush()
+                    delay(500) // Pequeña pausa entre impresiones
+                    outputStream.write(linea2.toByteArray(Charsets.US_ASCII))
+                    outputStream.flush()
                     Log.d("Bluetooth", "Datos enviados correctamente.")
 
 
@@ -1144,15 +1147,19 @@ suspend fun insertarDatosKit(datosKit: EnvioDatosRequest): ResponseCabeceraKit? 
         val response = RetrofitClient.apiService.insertaDataDetalle(datosKit)
         Log.d("*MAKITA001*", "Datos insertados con éxito: $response")
 
+        val seriesList = response.itemEncontrado?.map { it.serieInicio } ?: emptyList()
+
+
         val datosKitCabecera = EnvioCabeceraKitRequest(
-            ItemKitID =datosKit.selectedItem ,
-            ean = response.itemEncontrado.ean
-        )
+            ItemKitID = datosKit.selectedItem,
+            ean = response.ean,
+            series = seriesList
+            )
         // Ahora llamamos a otro endpoint (segundo)
         val secondResponse = RetrofitClient.apiService.insertaDataCabecera(datosKitCabecera)
-        Log.d("*MAKITA001*", "Respuesta del segundo endpoint: $secondResponse")
-
+      //  Log.d("*MAKITA001*", "Respuesta del segundo endpoint: $secondResponse")
         return secondResponse
+
     } catch (e: Exception) {
         Log.e("*MAKITA001*", "Error al insertar datos: ${e.message}")
         return null
