@@ -915,12 +915,11 @@ private fun isZebraPrinter(deviceName: String): Boolean {
 fun ButtonImprimir(
     context: Context,
     selectedDevice: BluetoothDevice?,
-    listaCodigos: List<CodigoData> ,
-    selectedItem : String,
+    listaCodigos: List<CodigoData>,
+    selectedItem: String,
     onClear: () -> Unit,
     isLoading: Boolean,
     setLoading: (Boolean) -> Unit
-
 ) {
 
     val datosKit = EnvioDatosRequest(
@@ -944,77 +943,81 @@ fun ButtonImprimir(
         Text("Permiso Bluetooth no otorgado. No se puede imprimir.")
     }
 
-    ExtendedFloatingActionButton(
+    // Deshabilitar el botón al hacer click y dejarlo deshabilitado
+    var isButtonEnabled by remember { mutableStateOf(true) }
+
+    Button(
         onClick = {
-            Log.d("ButtonImprimir", "Botón Imprimir presionado.")
-            setLoading(true)
-            CoroutineScope(Dispatchers.IO).launch {
-               val itemKitPdf  = insertarDatosKit(datosKit) // Llamada a la función suspendida
+            if (isButtonEnabled) { // Solo permitir el primer clic
+                isButtonEnabled = false // Bloquear el botón al hacer clic
+                Log.d("ButtonImprimir", "Botón Imprimir presionado.")
+                setLoading(true)
+                CoroutineScope(Dispatchers.IO).launch {
+                    val itemKitPdf = insertarDatosKit(datosKit) // Llamada a la función suspendida
 
-                if (itemKitPdf != null) {
-                    if (itemKitPdf.status == "success") {
-                        Log.d("*MAKITA001*", "Registro insertado correctamente: $itemKitPdf")
-                        val armadoCodigoKitPdf417 = "${itemKitPdf.ItemKitID.padEnd(20)}${itemKitPdf.serieDesde}${itemKitPdf.serieHasta}${itemKitPdf.ean}"
-                        val itemKit = itemKitPdf.ItemKitID
-                        if (hasBluetoothConnectPermission) {
-                            Log.d("ButtonImprimir", "Permiso Bluetooth otorgado.")
+                    if (itemKitPdf != null) {
+                        if (itemKitPdf.status == "success") {
+                            Log.d("*MAKITA001*", "Registro insertado correctamente: $itemKitPdf")
+                            val armadoCodigoKitPdf417 = "${itemKitPdf.ItemKitID.padEnd(20)}${itemKitPdf.serieDesde}${itemKitPdf.serieHasta}${itemKitPdf.ean}"
+                            val itemKit = itemKitPdf.ItemKitID
+                            if (hasBluetoothConnectPermission) {
+                                Log.d("ButtonImprimir", "Permiso Bluetooth otorgado.")
 
-                            selectedDevice?.let { device ->
-                                val printerLanguage = "ZPL" // Cambiar según el lenguaje soportado por la impresora
-                                Log.d("ButtonImprimir", "Dispositivo seleccionado: ${device.name}, Dirección: ${device.address}")
-                                val serieInicial =  itemKitPdf.serieDesde
-                                printDataToBluetoothDevice(
-                                    device,
-                                    armadoCodigoKitPdf417,
-                                    context,
-                                    printerLanguage,
-                                    onClear,
-                                    setLoading,
-                                    itemKit,
-                                    serieInicial
-
-                                )
+                                selectedDevice?.let { device ->
+                                    val printerLanguage = "ZPL" // Cambiar según el lenguaje soportado por la impresora
+                                    Log.d("ButtonImprimir", "Dispositivo seleccionado: ${device.name}, Dirección: ${device.address}")
+                                    val serieInicial = itemKitPdf.serieDesde
+                                    printDataToBluetoothDevice(
+                                        device,
+                                        armadoCodigoKitPdf417,
+                                        context,
+                                        printerLanguage,
+                                        onClear,
+                                        setLoading,
+                                        itemKit,
+                                        serieInicial
+                                    )
+                                }
+                            } else {
+                                Log.d("ButtonImprimir", "Permiso Bluetooth no otorgado al presionar el botón.")
+                                Toast.makeText(context, "Permiso Bluetooth no otorgado. No se puede imprimir.", Toast.LENGTH_LONG).show()
                             }
                         } else {
-                            Log.d("ButtonImprimir", "Permiso Bluetooth no otorgado al presionar el botón.")
-                            Toast.makeText(context, "Permiso Bluetooth no otorgado. No se puede imprimir.", Toast.LENGTH_LONG).show()
+                            Log.d("*MAKITA001*", "Error al insertar registro: ${itemKitPdf.message}")
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "KIT ya fue ingresado ", Toast.LENGTH_LONG).show()
+                                setLoading(false)
+                            }
+                            onClear()
                         }
-                    } else {
-                        Log.d("*MAKITA001*", "Error al insertar registro: ${itemKitPdf.message}")
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(context, "KIT ya fue ingresado ", Toast.LENGTH_LONG).show()
-                            setLoading(false)
-                        }
-                        onClear()
                     }
                 }
             }
-
-
         },
-        containerColor = Color(0xFF00909E),
-        contentColor = Color.White,
-        icon = {
-            Icon(
-                Icons.Outlined.Print,
-                contentDescription = "Imprimir",
-                modifier = Modifier.size(28.dp)
-            )
-        },
-        text = {
-            Text(
-                text = "Imprimir",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
-        },
+        enabled = isButtonEnabled, // Controla si el botón está habilitado o no
+        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00909E)),
         modifier = Modifier
             .height(50.dp)
             .width(200.dp)
-    )
 
-    Spacer(modifier = Modifier.width(8.dp))
+    ) {
+        Icon(
+            Icons.Outlined.Print,
+            contentDescription = "Imprimir",
+            modifier = Modifier.size(28.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = "Imprimir",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White
+        )
+    }
+    Spacer(modifier = Modifier.height(16.dp))
+
 }
+
 
 
 @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
