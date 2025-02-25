@@ -101,7 +101,7 @@ fun KitControlScreen() {
     var showCombo  by remember{ mutableStateOf(false) }
     var showButtonimprimir  by remember{ mutableStateOf(false) }
 
-    val minCodigoLength = 55
+    val minCodigoLength = 50
     val listaCodigos = remember { mutableStateListOf<CodigoData>() }
     val listaKits = remember { mutableStateListOf<KitItem>() }
     val context = LocalContext.current
@@ -156,7 +156,7 @@ fun KitControlScreen() {
     // Esto solo se ejecutará cuando el texto cambie realmente
     LaunchedEffect(textoEscaneado.text) {
         if (textoEscaneado.text.isNotEmpty()) {
-            codigoInvalido = textoEscaneado.text.length != minCodigoLength
+            codigoInvalido = textoEscaneado.text.length < minCodigoLength
             Log.d("*MAKITA*", "[KitControlScreen] Se ingresa texto: ${textoEscaneado.text}")
             if (codigoInvalido) {
                 textoEscaneado = TextFieldValue("")
@@ -361,7 +361,7 @@ fun Titulo() {
 }
 
 fun parseCodigo(texto: String): CodigoData {
-    if (texto.length < 52) {
+    if (texto.length < 50) {
         throw IllegalArgumentException("El código escaneado es demasiado corto: ${texto.length} caracteres")
     }
 
@@ -369,7 +369,7 @@ fun parseCodigo(texto: String): CodigoData {
     val serieInicio = texto.substring(20, 29)
     val serieHasta = texto.substring(29, 38)
     val letraFabrica = texto.substring(38, 39)
-    val ean = texto.substring(39, 52)
+    val ean = texto.substring(39)
 
     return CodigoData(item, serieInicio, serieHasta, letraFabrica, ean)
 }
