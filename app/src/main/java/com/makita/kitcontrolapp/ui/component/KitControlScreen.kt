@@ -25,6 +25,8 @@ import androidx.compose.foundation.rememberScrollState
 
 
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -45,13 +47,18 @@ import androidx.compose.material3.MaterialTheme
 
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,6 +74,7 @@ import com.makita.ubiapp.EnvioDatosRequest
 import com.makita.ubiapp.KitItem
 import com.makita.ubiapp.ResponseCabeceraKit
 import com.makita.ubiapp.RetrofitClient
+import com.makita.ubiapp.RetrofitClient.apiService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -101,7 +109,8 @@ fun KitControlScreen() {
     var showCombo  by remember{ mutableStateOf(false) }
     var showButtonimprimir  by remember{ mutableStateOf(false) }
 
-    val minCodigoLength = 55
+    val minCodigoLength = 52 // Etiqueta de fabrica
+    //val minCodigoLength = 10
     val listaCodigos = remember { mutableStateListOf<CodigoData>() }
     val listaKits = remember { mutableStateListOf<KitItem>() }
     val context = LocalContext.current
@@ -111,6 +120,10 @@ fun KitControlScreen() {
     var selectedDevice by remember { mutableStateOf<BluetoothDevice?>(null) }
     val scrollState = rememberScrollState()
     var isLoading by remember { mutableStateOf(false) } // Estado para el loading
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+
 
 
     fun clearAll() {
@@ -137,12 +150,12 @@ fun KitControlScreen() {
     fun onKitSelected(response: List<KitItem>) {
         // Mapeamos la lista para obtener solo el campo 'item'
         val simplifiedResponse = response.map { it.item }
-        Log.d("*MAKITA*", "simplifiedResponse: $simplifiedResponse")
+
         // Verificar si la lista está vacía o no
         if (simplifiedResponse.isNotEmpty()) {
             // Asignamos la lista de items
             selectedKitData = simplifiedResponse
-            Log.d("*MAKITA*", "selectedKitData: $selectedKitData")
+
             showCombo = true  // Mostrar el Combo si hay elementos seleccionados
         } else {
             selectedKitData = emptyList()
@@ -153,28 +166,68 @@ fun KitControlScreen() {
         Log.d("*MAKITA*", "Kit seleccionado ---> cargo la lista: ${simplifiedResponse.joinToString(", ")}")
     }
 
-    // Esto solo se ejecutará cuando el texto cambie realmente
-    LaunchedEffect(textoEscaneado.text) {
-        if (textoEscaneado.text.isNotEmpty()) {
-            codigoInvalido = textoEscaneado.text.length != minCodigoLength
-            Log.d("*MAKITA*", "[KitControlScreen] Se ingresa texto: ${textoEscaneado.text}")
-            if (codigoInvalido) {
-                textoEscaneado = TextFieldValue("")
-            }else{
-                dataItem = parseCodigo(textoEscaneado.text)
 
-                item =  dataItem!!.item
-                serieInicio =  dataItem!!.serieInicio
-                serieHasta =  dataItem!!.serieHasta
+    LaunchedEffect(Unit) {
+        keyboardController?.hide()
+    }
+
+
+    OutlinedTextField(
+        value = textoEscaneado,
+        onValueChange = { textoEscaneado = it },
+        label = { Text("Escanear Item", fontSize = 20.sp) },
+        textStyle = TextStyle(fontSize = 28.sp),
+        maxLines = 2,
+        modifier = Modifier .fillMaxWidth() .height(180.dp)  .padding(horizontal = 8.dp),
+        keyboardOptions = KeyboardOptions.Default.copy(
+            keyboardType = KeyboardType.Text, // el tipo que necesites
+            imeAction = ImeAction.Done
+        ),
+        keyboardActions = KeyboardActions(
+            onAny = { keyboardController?.hide() } // fuerza a ocultar teclado
+        ),
+        singleLine = false,
+        readOnly = true
+    )
+
+
+
+    LaunchedEffect(textoEscaneado.text) {
+
+        if (textoEscaneado.text.isNotEmpty()) {
+
+            Log.d("*MAKITA*", " texto: ${textoEscaneado.text}")
+            Log.d("*MAKITA*", " largo 1 : ${textoEscaneado.text.length}")
+
+            codigoInvalido = textoEscaneado.text.length <= 52
+
+            if ( textoEscaneado.text.length <= 52)
+            {
+                codigoInvalido = true
+            }
+
+            Log.d("*MAKITA*", " valor de codigoInvalido: ${codigoInvalido}")
+            Log.d("*MAKITA*", " largo 1 : ${textoEscaneado.text.length}")
+
+            if (codigoInvalido) {
+                item = textoEscaneado.text
+                textoEscaneado = TextFieldValue("")
+            }
+            else
+            {
+
+                dataItem      = parseCodigo(textoEscaneado.text)
+                item         =  dataItem!!.item
+                serieInicio  =  dataItem!!.serieInicio
+                serieHasta   =  dataItem!!.serieHasta
                 letraFabrica =  dataItem!!.letraFabrica
-                ean =  dataItem!!.ean
+                ean          =  dataItem!!.ean
 
                 listaCodigos.add(dataItem!!)
-
                 showTable = true
-                textoEscaneado = TextFieldValue("")
 
-               // guardarCodigoEnArchivo(context, dataItem!!)
+
+               // textoEscaneado = TextFieldValue(dataItem!!.item)
 
             }
         }
@@ -223,8 +276,10 @@ fun KitControlScreen() {
             OutlinedTextField(
                 value = textoEscaneado,
                 onValueChange = { newTextFieldValue ->
-                    Log.d("*MAKITA00*" , "newTextFieldValue $newTextFieldValue")
+                    Log.d("*MAKITA*" , "newTextFieldValue $newTextFieldValue")
                     val nuevoTexto = newTextFieldValue.text.take(55).trim()
+
+                    Log.d("*MAKITA*", "[PASA] Nuevo valor recibido: $nuevoTexto")
 
                     // Solo logea si el texto es diferente al anterior
                     if (nuevoTexto != textoEscaneado.text) {
@@ -233,6 +288,8 @@ fun KitControlScreen() {
 
                     // Actualiza el textoEscaneado con el nuevo valor
                     textoEscaneado = TextFieldValue(text = nuevoTexto)
+
+                    Log.d("*MAKITA*", "[onValueChange] Nuevo valor recibido: $textoEscaneado")
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -257,10 +314,11 @@ fun KitControlScreen() {
                     unfocusedLabelColor = GreenMakita,
                     cursorColor = GreenMakita
                 ),
+
                 trailingIcon = {
                     Icon(
                         imageVector = Icons.Filled.Delete,
-                        contentDescription = "Clear text",
+                        contentDescription = "Borrar texto",
                         modifier = Modifier
                             .size(24.dp)
                             .clickable {
@@ -273,10 +331,10 @@ fun KitControlScreen() {
 
             if (codigoInvalido) {
                 Text(
-                    "Código incorrecto, intente nuevamente",
+                    "Largo Etiqueta Incorrecto, debe ser Etiqueta de Fabrica",
                     color = Color.Red,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
+                    fontSize = 16.sp
                 )
 
             }
@@ -325,7 +383,6 @@ fun KitControlScreen() {
 
 
 
-
             if (clearRequested) {
                 textoEscaneado =  TextFieldValue("")
                 clearRequested = false  // Evita que se repita el efecto
@@ -345,7 +402,7 @@ fun Titulo() {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "KIT-CONTROL",
+            text = "KIT-CONTROL (SAP) ",
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF00909E),
@@ -362,7 +419,7 @@ fun Titulo() {
 
 fun parseCodigo(texto: String): CodigoData {
     if (texto.length < 52) {
-        throw IllegalArgumentException("El código escaneado es demasiado corto: ${texto.length} caracteres")
+        throw IllegalArgumentException("El código escaneado No corresponde a Etiqueta Fabrica , largo corto: ${texto.length} caracteres")
     }
 
     val item = texto.substring(0, 20).trim()
@@ -370,6 +427,13 @@ fun parseCodigo(texto: String): CodigoData {
     val serieHasta = texto.substring(29, 38)
     val letraFabrica = texto.substring(38, 39)
     val ean = texto.substring(39, 52)
+
+
+    Log.d("*MAKITA*", "Item: ${item}")
+    Log.d("*MAKITA*", "Serie inicio: $serieInicio")
+    Log.d("*MAKITA*", "Serie hasta: $serieHasta")
+    Log.d("*MAKITA*", "Letra fábrica: $letraFabrica")
+    Log.d("*MAKITA* ", "EAN: $ean")
 
     return CodigoData(item, serieInicio, serieHasta, letraFabrica, ean)
 }
@@ -381,7 +445,8 @@ fun MostrarDatosTabla(
     serieInicio: String,
     serieFinal: String,
     ean: String,
-    onItemPadreSelected: (List<KitItem>) -> Unit // Función para manejar el cambio de selección
+    onItemPadreSelected: (List<KitItem>) -> Unit, // Función para manejar el cambio de selección
+    onItemPadreChange: (Boolean) -> Unit
 ) {
 
     val coroutineScope = rememberCoroutineScope()
@@ -395,31 +460,53 @@ fun MostrarDatosTabla(
         horizontalArrangement = Arrangement.Start
     ) {
         // Agregar el checkbox para "Item Padre", alineado junto a la fila
+
+        //Log.d("*MAKITA*", "MostrarDatosTabla XX: $itemPadre")
+
         Checkbox(
             checked = itemPadre,
-            onCheckedChange = {
-                coroutineScope.launch {
-                    try {
-                        apiResponse = RetrofitClient.apiService.obtenerListaKit(item)
-                        if (apiResponse.isEmpty()) {
-                            showDialog = true // Mostrar el diálogo si no hay datos
-                        } else {
-                            onItemPadreSelected(apiResponse)
+            onCheckedChange = { isChecked ->
+                // Actualizar el estado del checkbox
+                onItemPadreChange(isChecked)  // <-- callback desde el Composable padre
+
+                if (isChecked) {
+                    coroutineScope.launch {
+                        try {
+
+                            Log.d("*MAKITA*", " INGRESA API para item: $item")
+
+                            Log.d("*MAKITA*", "Ejecutando llamada a obtenerListaKit_Sap con item: $item")
+
+                            try {
+                                 apiResponse = apiService.obtenerListaKit_Sap(item)
+                                Log.d("*MAKITA*", "Ejecutando llamada a obtenerListaKit_Sap con item: $item")
+                                Log.d("*MAKITA*", "Respuesta recibida: $apiResponse")
+                            } catch (e: Exception) {
+                                Log.e("*MAKITA*", "Error en la llamada: ${e}", e)
+                            }
+
+
+                            if (apiResponse.isEmpty()) {
+                                showDialog = true // Mostrar diálogo si no hay datos
+                            } else {
+                                onItemPadreSelected(apiResponse)
+                            }
+
+                        } catch (e: Exception) {
+                            Log.e("*ERROR API*", "Error al obtener datos: ${e.message}")
+                            showDialog = true
                         }
-                    } catch (e: Exception) {
-                        Log.e("*ERROR API*", "Error al obtener datos: ${e.message}")
-                        showDialog = true // También mostrar el diálogo en caso de error
                     }
                 }
             },
             modifier = Modifier
                 .width(130.dp)
                 .padding(horizontal = 16.dp)
-                .align(Alignment.CenterVertically), // Alinea verticalmente con el contenido de la fila
+                .align(Alignment.CenterVertically),
             colors = CheckboxDefaults.colors(
-                checkedColor = Color(0xFF008686), // Color verde "Green Makita" cuando está seleccionado
-                uncheckedColor = Color.Gray, // Color para cuando no está seleccionado
-                checkmarkColor = Color.White // Color blanco para la marca de verificación
+                checkedColor = Color(0xFF008686),
+                uncheckedColor = Color.Gray,
+                checkmarkColor = Color.White
             )
         )
 
@@ -440,7 +527,7 @@ fun MostrarDatosTabla(
                 modifier = Modifier
                     .width(130.dp)
                     .padding(horizontal = 16.dp)
-                    .align(Alignment.CenterVertically), // Alinea verticalmente con el checkbox
+                    .align(Alignment.CenterVertically),
                 fontSize = 15.sp,
                 fontFamily = FontFamily.Serif,
                 maxLines = 1,
@@ -461,7 +548,6 @@ fun MostrarDatosTabla(
             }
         )
     }
-
 }
 
 
@@ -472,11 +558,14 @@ fun MostrarListaDeCodigos(listaCodigos: List<CodigoData> , onKitSelected: (List<
 
     val selectedItemIndex = remember { mutableStateOf<Int?>(null) }
     var apiData by remember { mutableStateOf<List<KitItem>>(emptyList()) }
+    var itemPadre by remember { mutableStateOf(false) }
    LazyRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp)
     ) {
+
+        Log.d("*MAKITA*", "Ingresando a MostrarListaDeCodigos")
         item {
             // Mostrar las cabeceras y los datos en una fila horizontal
             Column {
@@ -501,6 +590,9 @@ fun MostrarListaDeCodigos(listaCodigos: List<CodigoData> , onKitSelected: (List<
                             Log.d("*MAKITA*", "apiDatao: $apiData")
                             onKitSelected(apiData)
 
+                        },
+                        onItemPadreChange = { isChecked ->
+                            itemPadre = isChecked // actualiza el estado del checkbox
                         }
                     )
 
@@ -790,24 +882,19 @@ fun BluetoothDeviceList(
     deviceList: List<BluetoothDevice>,
     onDeviceSelected: (BluetoothDevice) -> Unit
 ) {
-
     val context = LocalContext.current
-    // Verifica el permiso BLUETOOTH_CONNECT en dispositivos con Android 12 (API 31) o superior
-    Log.d("ETIQUETADO-Z", "BluetoothDeviceList")
+   // Log.d("ETIQUETADO-Z", "BluetoothDeviceList")
 
+    // Verifica permiso BLUETOOTH_CONNECT en Android 12+ (API 31)
     val hasBluetoothConnectPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.BLUETOOTH_CONNECT
         ) == PackageManager.PERMISSION_GRANTED
-
     } else {
-        Log.d("ETIQUETADO-Z", "permisos OK")
         true // No se requiere permiso en versiones anteriores
     }
 
-
-    // Solo muestra la lista si el permiso es otorgado o si el sistema no lo requiere
     if (hasBluetoothConnectPermission) {
         LazyColumn(modifier = Modifier.fillMaxHeight()) {
             items(deviceList) { device ->
@@ -821,11 +908,23 @@ fun BluetoothDeviceList(
             }
         }
     } else {
-        // Mostrar mensaje o manejar el caso en el que no se tiene el permiso
-        Log.d("ETIQUETADO-Z", " Permisos Denegados")
-        Text("Permiso Bluetooth no otorgado. No se pueden mostrar los dispositivos.")
+        // Mensaje cuando no hay permisos
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "Permiso de Bluetooth no otorgado.\nNo se pueden mostrar los dispositivos.",
+                color = Color.Red,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+        }
     }
 }
+
 
 
 fun startBluetoothDiscovery(
@@ -950,22 +1049,27 @@ fun ButtonImprimir(
         onClick = {
             if (isButtonEnabled) { // Solo permitir el primer clic
                 isButtonEnabled = false // Bloquear el botón al hacer clic
-                Log.d("ButtonImprimir", "Botón Imprimir presionado.")
+                Log.d("*MAKITA*", "Botón Imprimir presionado.")
                 setLoading(true)
                 CoroutineScope(Dispatchers.IO).launch {
+
+                    Log.d("*MAKITA*", "Datos que se van a insertar: $datosKit")
+
                     val itemKitPdf = insertarDatosKit(datosKit) // Llamada a la función suspendida
 
                     if (itemKitPdf != null) {
                         if (itemKitPdf.status == "success") {
-                            Log.d("*MAKITA001*", "Registro insertado correctamente: $itemKitPdf")
+                            Log.d("*MAKITA*", "Registro insertado correctamente: $itemKitPdf")
                             val armadoCodigoKitPdf417 = "${itemKitPdf.ItemKitID.padEnd(20)}${itemKitPdf.serieDesde}${itemKitPdf.serieHasta}${itemKitPdf.ean}"
+                            Log.d("*MAKITA*", "Registro insertado correctamente: $armadoCodigoKitPdf417")
+
                             val itemKit = itemKitPdf.ItemKitID
                             if (hasBluetoothConnectPermission) {
-                                Log.d("ButtonImprimir", "Permiso Bluetooth otorgado.")
+                                Log.d("*MAKITA*", "Permiso Bluetooth otorgado.")
 
                                 selectedDevice?.let { device ->
                                     val printerLanguage = "ZPL" // Cambiar según el lenguaje soportado por la impresora
-                                    Log.d("ButtonImprimir", "Dispositivo seleccionado: ${device.name}, Dirección: ${device.address}")
+                                    Log.d("MAKITA*", "Dispositivo seleccionado: ${device.name}, Dirección: ${device.address}")
                                     val serieInicial = itemKitPdf.serieDesde
                                     printDataToBluetoothDevice(
                                         device,
@@ -1147,8 +1251,12 @@ fun prepararDatosImpresion(
 
 suspend fun insertarDatosKit(datosKit: EnvioDatosRequest): ResponseCabeceraKit? {
     try {
-        val response = RetrofitClient.apiService.insertaDataDetalle(datosKit)
-        Log.d("*MAKITA001*", "Datos insertados con éxito: $response")
+
+        Log.d("*MAKITA*", "Ingresa a funcion insertarDatosKit *BMB* $datosKit")
+
+        val response = apiService.insertDataDetalle(datosKit)
+
+        Log.d("*MAKITA*", "Datos insertados con éxito: $response")
 
         val seriesList = response.itemEncontrado?.map { it.serieInicio } ?: emptyList()
 
@@ -1158,13 +1266,16 @@ suspend fun insertarDatosKit(datosKit: EnvioDatosRequest): ResponseCabeceraKit? 
             ean = response.ean,
             series = seriesList
             )
-        // Ahora llamamos a otro endpoint (segundo)
-        val secondResponse = RetrofitClient.apiService.insertaDataCabecera(datosKitCabecera)
-      //  Log.d("*MAKITA001*", "Respuesta del segundo endpoint: $secondResponse")
+        //Ahora llamamos a otro endpoint (segundo)
+
+        Log.d("*MAKITA*", "Ingresa insertaDataCabecera *BMB* $datosKitCabecera")
+
+        val secondResponse = apiService.insertaDataCabecera(datosKitCabecera)
+        Log.d("*MAKITA*", "Respuesta del segundo endpoint: $secondResponse")
         return secondResponse
 
     } catch (e: Exception) {
-        Log.e("*MAKITA001*", "Error al insertar datos: ${e.message}")
+        Log.e("*MAKITA*", "Error al insertar datos: ${e.message}")
         return null
     }
 }
@@ -1182,11 +1293,11 @@ fun LoadingIndicator() {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             CircularProgressIndicator(
-                modifier = Modifier.size(60.dp), // Tamaño del indicador
-                color = Color(0xFF00909E), // Color personalizado
-                strokeWidth = 6.dp // Grosor del círculo
+                modifier = Modifier.size(40.dp), // Tamaño
+                color = Color(0xFFB0BEC5), // Color
+                strokeWidth = 4.dp // Grosor
             )
-            Spacer(modifier = Modifier.height(16.dp)) // Espaciado
+            Spacer(modifier = Modifier.height(16.dp))
             Text(
                 text = "Cargando...",
                 fontSize = 18.sp,

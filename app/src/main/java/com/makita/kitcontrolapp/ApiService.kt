@@ -1,6 +1,7 @@
 package com.makita.ubiapp
 
 import com.makita.kitcontrolapp.ui.component.CodigoData
+
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
@@ -51,19 +52,23 @@ data class ResponseDetalleKit(
 )
 
 interface ApiService {
+    @GET("api/obtenerListaKit_Sap/{ItemCode}")
+    suspend fun obtenerListaKit_Sap(@Path("ItemCode") ItemCode: String): List<KitItem>
+
     @GET("api/get-lista-kit/{item}")
     suspend fun obtenerListaKit(@Path("item") item: String): List<KitItem>
 
+    @POST("api/insertDataDetalle")
+    suspend fun insertDataDetalle(@Body data: EnvioDatosRequest): ResponseApi
 
-    @POST("api/inserta-data-kit-detalle")
-    suspend fun insertaDataDetalle(@Body data: EnvioDatosRequest): ResponseApi
-
-    @POST("api/inserta-data-cabecera-kit")  // Endpoint de la API
+    @POST("api/insertaDataCabecera")  // Endpoint de la API
     suspend fun insertaDataCabecera(@Body data: EnvioCabeceraKitRequest): ResponseCabeceraKit
 
-    @DELETE("api/elimina-data-kit-detalle")  // Nuevo endpoint para eliminar detalles del kit
-    suspend fun eliminarDataDetalle(@Body data: EnvioDatosRequest): ResponseApi
+    @DELETE("api/eliminarDataKitDetalle")  // Nuevo endpoint para eliminar detalles del kit
+    suspend fun eliminarDataKitDetalle(@Body data: EnvioDatosRequest): ResponseApi
 
-    @DELETE("api/elimina-data-cabecera-kit")  // Nuevo endpoint para eliminar cabecera del kit
-    suspend fun eliminarDataCabecera(@Body data: EnvioCabeceraKitRequest): ResponseCabeceraKit
+    @DELETE("api/eliminarItemKitCabecera")  // Nuevo endpoint para eliminar cabecera del kit
+    suspend fun eliminarItemKitCabecera(@Body data: EnvioCabeceraKitRequest): ResponseCabeceraKit
+
+
 }

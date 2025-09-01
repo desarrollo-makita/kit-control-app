@@ -29,10 +29,8 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    Log.d("*MAKITA*", "Iniciamos MainActivity - KitControlAppTheme")
-                    val navController = rememberNavController()
 
-                    // Configuramos el NavHost
+                    val navController = rememberNavController()
                     SetupNavGraph(navController = navController)
                 }
             }
@@ -45,9 +43,9 @@ class MainActivity : ComponentActivity() {
 fun SetupNavGraph(navController: androidx.navigation.NavHostController) {
     NavHost(
         navController = navController,
-        startDestination = "kitControl" // Cambiamos el punto de inicio
+        startDestination = "kitControl"
     ) {
-        // Agregamos la ruta para EtiquetadoScreen417
+
         composable("kitControl") {
            KitControlScreen()
         }
